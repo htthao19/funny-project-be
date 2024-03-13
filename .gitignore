@@ -1,0 +1,10 @@
+lastupdate.tmp
+funny-project-be
+*.app.conf
+
+# IDEs
+.vscode/
+.idea/
+
+# Binary buid
+infra/svc
