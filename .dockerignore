@@ -1,0 +1,19 @@
+# Ignore system-specific files
+.DS_Store
+Thumbs.db
+
+# Ignore Go binaries and object files
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.prof
+
+# Ignore vendor directories
+/vendor/
+
+# Ignore any build artifacts or logs
+*.log
+/build/
