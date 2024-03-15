@@ -184,7 +184,7 @@ func (c *VideoController) CreateVideo() {
 		return
 	}
 
-	c.broadcastWebSocket(NewVideoFromEntity(video), uid, c.Ctx.Input.IP())
+	c.broadcastWebSocket(NewVideoFromEntity(video), uid)
 
 	resp.Code = status.Created
 	resp.Video = NewVideoFromEntity(video)
@@ -208,6 +208,7 @@ func (c *VideoController) ListVideos() {
 	var req ListVideosRequest
 	var resp ListVideosResponse
 	resp.Code = status.OK
+	resp.Items = []*Video{}
 
 	defer func() {
 		c.Ctx.Output.SetStatus(resp.Code / 1000)
@@ -301,7 +302,7 @@ func (c *VideoController) JoinWebSocket() {
 }
 
 // broadcastWebSocket broadcasts messages to WebSocket users.
-func (c *VideoController) broadcastWebSocket(video *Video, uid uint, ip string) {
+func (c *VideoController) broadcastWebSocket(video *Video, uid uint) {
 	data, err := json.Marshal(video)
 	if err != nil {
 		beego.Error("Fail to marshal video:", err)
@@ -309,9 +310,9 @@ func (c *VideoController) broadcastWebSocket(video *Video, uid uint, ip string) 
 	}
 
 	for sub := subscribers.Front(); sub != nil; sub = sub.Next() {
-		// if uid == sub.Value.(Subscriber).UID && ip == sub.Value.(Subscriber).IP {
-		// 	continue
-		// }
+		if uid == sub.Value.(Subscriber).UID {
+			continue
+		}
 		ws := sub.Value.(Subscriber).Conn
 		if ws != nil {
 			if ws.WriteMessage(websocket.TextMessage, data) != nil {
