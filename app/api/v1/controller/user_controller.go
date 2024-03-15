@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/beego/beego/logs"
+	"github.com/beego/beego"
 	"github.com/beego/beego/validation"
 	"github.com/dgrijalva/jwt-go"
 	"golang.org/x/oauth2"
@@ -106,7 +106,7 @@ func (c *UserController) Login() {
 	if err != nil {
 		resp.Code = status.InternalServerError
 		resp.SetError(err)
-		logs.Error("Login ", err)
+		beego.Error("Login ", err)
 		return
 	}
 	if !valid {
@@ -121,7 +121,6 @@ func (c *UserController) Login() {
 		RedirectURL:  req.RedirectURL,
 		Endpoint:     google.Endpoint,
 	}
-	fmt.Printf("%+v\n", conf)
 
 	// exchange auth_code to token including refresh_token
 	token, err := conf.Exchange(context.Background(), req.Code)
@@ -146,7 +145,6 @@ func (c *UserController) Login() {
 		resp.Code = status.Unauthorized
 		return
 	}
-	fmt.Println(string(contents))
 
 	gUser := GoogleUser{}
 	if err = json.Unmarshal(contents, &gUser); err != nil {
@@ -166,20 +164,20 @@ func (c *UserController) Login() {
 			if err := c.URepo.Add(ctx, user); err != nil {
 				resp.Code = status.InternalServerError
 				resp.SetError(err)
-				logs.Error("Login ", err)
+				beego.Error("Login ", err)
 				return
 			}
 			user, err = c.URepo.GetOneByEmail(ctx, gUser.Email)
 			if err != nil {
 				resp.Code = status.InternalServerError
 				resp.SetError(err)
-				logs.Error("Login ", err)
+				beego.Error("Login ", err)
 				return
 			}
 		} else {
 			resp.Code = status.InternalServerError
 			resp.SetError(err)
-			logs.Error("Login ", err)
+			beego.Error("Login ", err)
 			return
 		}
 	}
@@ -234,7 +232,7 @@ func (c *UserController) GetUser() {
 		}
 		resp.Code = status.InternalServerError
 		resp.SetError(err)
-		logs.Error("GetUser ", err)
+		beego.Error("GetUser ", err)
 		return
 	}
 	resp.Email = user.Email

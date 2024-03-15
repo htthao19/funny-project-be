@@ -64,6 +64,7 @@ func main() {
 	}))
 
 	beego.InsertFilter("*", beego.BeforeRouter, authn.VerifyToken(opts))
+	beego.BConfig.WebConfig.AutoRender = false
 
 	beego.Run()
 }

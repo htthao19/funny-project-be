@@ -8,7 +8,6 @@ import (
 
 	"github.com/beego/beego"
 	"github.com/beego/beego/context"
-	"github.com/beego/beego/logs"
 	jwt "github.com/dgrijalva/jwt-go"
 
 	"funny-project-be/infra/constant"
@@ -18,35 +17,13 @@ import (
 // VerifyToken verifies the JWT.
 func VerifyToken(opts options.Options) beego.FilterFunc {
 	return func(ctx *context.Context) {
-		if strings.HasPrefix(ctx.Input.URL(), "/funny-project/v1/rpc/auth/login") {
+		if strings.HasPrefix(ctx.Input.URL(), "/funny-project/v1/rpc/auth/login") || strings.HasPrefix(ctx.Input.URL(), "/funny-project/v1/ws") {
 			return
 		}
 
 		w := ctx.ResponseWriter
-		// The Authorization header should come in this format: Bearer <jwt>
-		s := strings.SplitN(ctx.Request.Header.Get("Authorization"), " ", 2)
-		if len(s) != 2 || s[0] != "Bearer" {
-			w.WriteHeader(401)
-			w.Write([]byte("401 Unauthorized\n"))
-			return
-		}
-
-		tokenString := s[1]
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-			}
-			return []byte(opts.AccessTokenSecret), nil
-		})
-		if err != nil {
-			logs.Error("VerifyToken ", err)
-			w.WriteHeader(401)
-			w.Write([]byte("401 Unauthorized\n"))
-			return
-		}
-
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok || !token.Valid {
+		claims, valid := IsValidJWT(opts, ctx.Request.Header.Get("Authorization"))
+		if !valid {
 			w.WriteHeader(401)
 			w.Write([]byte("401 Unauthorized\n"))
 			return
@@ -54,7 +31,7 @@ func VerifyToken(opts options.Options) beego.FilterFunc {
 
 		uid, err := strconv.Atoi(claims["sub"].(string))
 		if err != nil {
-			logs.Error("VerifyToken ", err)
+			beego.Error("VerifyToken ", err)
 			w.WriteHeader(401)
 			w.Write([]byte("401 Unauthorized\n"))
 			return
@@ -67,4 +44,30 @@ func VerifyToken(opts options.Options) beego.FilterFunc {
 		customctx = goctx.WithValue(customctx, constant.ContextEmail, claims["email"])
 		ctx.Input.SetData(constant.ContextCtx, customctx)
 	}
+}
+
+func IsValidJWT(opts options.Options, token string) (jwt.MapClaims, bool) {
+	// The Authorization header should come in this format: Bearer <jwt>
+	s := strings.SplitN(token, " ", 2)
+	if len(s) != 2 || s[0] != "Bearer" {
+		return nil, false
+	}
+
+	t, err := jwt.Parse(s[1], func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return []byte(opts.AccessTokenSecret), nil
+	})
+	if err != nil {
+		beego.Error("IsValidJWT ", err)
+		return nil, false
+	}
+
+	claims, ok := t.Claims.(jwt.MapClaims)
+	if !ok || !t.Valid {
+		return nil, false
+	}
+
+	return claims, true
 }

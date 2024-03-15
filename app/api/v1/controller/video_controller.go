@@ -1,18 +1,23 @@
 package controller
 
 import (
+	"container/list"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
 	"strconv"
 	"time"
 
-	"github.com/beego/beego/logs"
+	"github.com/beego/beego"
 	"github.com/beego/beego/validation"
+	"github.com/gorilla/websocket"
 	"gorm.io/gorm"
 
 	"funny-project-be/domain/entity"
 	"funny-project-be/domain/repo"
+	"funny-project-be/infra/beego/plugin/authn"
 	"funny-project-be/infra/constant"
 	"funny-project-be/infra/options"
 	"funny-project-be/infra/status"
@@ -54,6 +59,18 @@ func NewVideoFromEntity(e *entity.Video) *Video {
 	}
 }
 
+type Subscriber struct {
+	UID  uint
+	IP   string
+	Conn *websocket.Conn // Only for WebSocket users; otherwise nil.
+}
+
+var (
+	// Channel for new join users.
+	subscribe   = make(chan Subscriber, 100)
+	subscribers = list.New()
+)
+
 // GetVideoRequest represents a request for get video.
 type GetVideoRequest struct {
 	ID uint
@@ -93,7 +110,7 @@ func (c *VideoController) GetVideo() {
 			return
 		}
 		resp.Code = status.InternalServerError
-		logs.Error("GetVideo ", err)
+		beego.Error("GetVideo ", err)
 		return
 	}
 
@@ -135,7 +152,7 @@ func (c *VideoController) CreateVideo() {
 	if err != nil {
 		resp.Code = status.InternalServerError
 		resp.SetError(err)
-		logs.Error("CreateVideo ", err)
+		beego.Error("CreateVideo ", err)
 		return
 	}
 	if !valid {
@@ -155,7 +172,7 @@ func (c *VideoController) CreateVideo() {
 	if err != nil {
 		resp.Code = status.InternalServerError
 		resp.SetError(err)
-		logs.Error("GetUser ", err)
+		beego.Error("GetUser ", err)
 		return
 	}
 	video.SharedBy = user.Email
@@ -163,9 +180,11 @@ func (c *VideoController) CreateVideo() {
 	if err := c.VRepo.Add(ctx, video); err != nil {
 		resp.Code = status.InternalServerError
 		resp.SetError(err)
-		logs.Error("CreateVideo ", err)
+		beego.Error("CreateVideo ", err)
 		return
 	}
+
+	c.broadcastWebSocket(NewVideoFromEntity(video), uid, c.Ctx.Input.IP())
 
 	resp.Code = status.Created
 	resp.Video = NewVideoFromEntity(video)
@@ -207,7 +226,7 @@ func (c *VideoController) ListVideos() {
 	if err != nil {
 		resp.Code = status.InternalServerError
 		resp.SetError(err)
-		logs.Error("ListVideos ", err)
+		beego.Error("ListVideos ", err)
 		return
 	}
 	if !valid {
@@ -221,14 +240,14 @@ func (c *VideoController) ListVideos() {
 	if err != nil {
 		resp.Code = status.InternalServerError
 		resp.SetError(err)
-		logs.Error("ListVideos ", err)
+		beego.Error("ListVideos ", err)
 		return
 	}
 	total, err := c.VRepo.Count(ctx)
 	if err != nil {
 		resp.Code = status.InternalServerError
 		resp.SetError(err)
-		logs.Error("ListVideos ", err)
+		beego.Error("ListVideos ", err)
 		return
 	}
 
@@ -240,4 +259,77 @@ func (c *VideoController) ListVideos() {
 			resp.Items = append(resp.Items, video)
 		}
 	}
+}
+
+// Join method handles WebSocket requests.
+func (c *VideoController) JoinWebSocket() {
+	ip := c.Ctx.Input.IP()
+	// Upgrade from http request to WebSocket.
+	var upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			// Allow all origins for WebSocket connections
+			return true
+		},
+	}
+	ws, err := upgrader.Upgrade(c.Ctx.ResponseWriter, c.Ctx.Request, nil)
+	if _, ok := err.(websocket.HandshakeError); ok {
+		http.Error(c.Ctx.ResponseWriter, "Not a websocket handshake", 400)
+		return
+	} else if err != nil {
+		beego.Error("Cannot setup WebSocket connection:", err)
+		return
+	}
+
+	_, tokenBytes, err := ws.ReadMessage()
+	if err != nil {
+		ws.Close()
+		return
+	}
+	claims, valid := authn.IsValidJWT(c.Opts, string(tokenBytes))
+	if !valid {
+		ws.Close()
+		return
+	}
+	uid, err := strconv.Atoi(claims["sub"].(string))
+	if err != nil {
+		ws.Close()
+		return
+	}
+	subscribe <- Subscriber{UID: uint(uid), IP: ip, Conn: ws}
+}
+
+// broadcastWebSocket broadcasts messages to WebSocket users.
+func (c *VideoController) broadcastWebSocket(video *Video, uid uint, ip string) {
+	data, err := json.Marshal(video)
+	if err != nil {
+		beego.Error("Fail to marshal video:", err)
+		return
+	}
+
+	for sub := subscribers.Front(); sub != nil; sub = sub.Next() {
+		// if uid == sub.Value.(Subscriber).UID && ip == sub.Value.(Subscriber).IP {
+		// 	continue
+		// }
+		ws := sub.Value.(Subscriber).Conn
+		if ws != nil {
+			if ws.WriteMessage(websocket.TextMessage, data) != nil {
+				beego.Info("User disconnected")
+			}
+		}
+	}
+}
+
+// This function handles all incoming chan messages.
+func handleScription() {
+	for {
+		sub := <-subscribe
+		subscribers.PushBack(sub)
+		fmt.Printf("%v+\n", subscribers)
+	}
+}
+
+func init() {
+	go handleScription()
 }

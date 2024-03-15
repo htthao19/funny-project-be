@@ -33,6 +33,12 @@ func InitRouters(
 						beego.NSRouter("/login", &controller.UserController{BaseController: controller.BaseController{}, URepo: uRepo, Opts: opts}, "post:Login"),
 					),
 				),
+
+				beego.NSNamespace("/ws",
+					beego.NSNamespace("/videos",
+						beego.NSRouter("/join", &controller.VideoController{BaseController: controller.BaseController{}, VRepo: vRepo, URepo: uRepo, Opts: opts}, "get:JoinWebSocket"),
+					),
+				),
 			),
 		),
 	)
