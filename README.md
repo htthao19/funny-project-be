@@ -25,7 +25,7 @@ go run ../cmd/svc/main.go
 
 To run unit tests
 ```
-go test -v
+go test ./...
 ```
 ## Using Docker
 ```
