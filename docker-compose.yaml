@@ -4,12 +4,6 @@ services:
     build: ../funny-project-fe
     networks:
       - default
-    environment:
-      REACT_APP_DOMAIN: "http://localhost:3000"
-      REACT_APP_API_URL: "http://localhost:8080/funny-project"
-      REACT_APP_API_URL_WEB_SOCKET: "ws://localhost:8080/funny-project"
-      REACT_APP_GOOGLE_CLIENT_ID: "424064337429-p9uh10or075o6ec44c6i94nua5q6lqq7.apps.googleusercontent.com"
-      REACT_APP_SESSION_COOKIE_NAME: "token"
     restart: always
     ports:
       - 3000:80

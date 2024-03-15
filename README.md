@@ -22,6 +22,11 @@ You can change .env values if you want.
 cd infra
 go run ../cmd/svc/main.go
 ```
+
+To run unit tests
+```
+go test -v
+```
 ## Using Docker
 ```
 docker compose up -d
